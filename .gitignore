@@ -1,0 +1,20 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+coverage/
+
+# Go
+bin/
+*.exe
+*.test
+*.out
+
+# Build artifacts
+dist/
+
+# Editor
+.idea/

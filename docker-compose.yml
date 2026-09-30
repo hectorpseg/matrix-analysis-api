@@ -1,0 +1,28 @@
+services:
+  go-api:
+    build: go-api
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - NODE_API_URL=http://node-api:3001
+    depends_on:
+      node-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  node-api:
+    build: node-api
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
