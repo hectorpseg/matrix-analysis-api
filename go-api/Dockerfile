@@ -6,7 +6,7 @@ COPY . .
 RUN CGO_ENABLED=0 go build -o /bin/app .
 
 FROM alpine
-RUN adduser -D -H appuser
+RUN apk add --no-cache wget && adduser -D -H appuser
 USER appuser
 COPY --from=build /bin/app /bin/app
 ENV PORT=8080

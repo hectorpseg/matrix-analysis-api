@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Factorización QR</title>
+  <style>
+    :root {
+      --bg: #f5f7fa;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --accent: #2563eb;
+      --error: #dc2626;
+      --success: #16a34a;
+      --a: #2563eb;
+      --q: #059669;
+      --r: #d97706;
+      --border: #e5e7eb;
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    .container {
+      max-width: 840px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem;
+    }
+
+    header {
+      margin-bottom: 1.5rem;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.75rem;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      margin: 0.25rem 0 0;
+    }
+
+    h2 {
+      margin-top: 0;
+      font-size: 1.2rem;
+    }
+
+    h3 {
+      margin: 0 0 0.75rem;
+      font-size: 1.1rem;
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: 0.75rem;
+      box-shadow: var(--shadow);
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 6.5rem;
+      padding: 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 1rem;
+      resize: vertical;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 0.875rem;
+      margin: 0.35rem 0 0;
+    }
+
+    button {
+      margin-top: 0.9rem;
+      padding: 0.65rem 1.5rem;
+      border: none;
+      border-radius: 0.5rem;
+      background: var(--accent);
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+    }
+
+    .error {
+      color: var(--error);
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 0.5rem;
+      padding: 0.75rem 1rem;
+      margin-top: 0.75rem;
+    }
+
+    .loading {
+      color: var(--muted);
+      margin-top: 0.75rem;
+    }
+
+    .result {
+      display: none;
+    }
+
+    .result.visible {
+      display: block;
+    }
+
+    .flow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin: 1rem 0;
+    }
+
+    .flow-part {
+      text-align: center;
+    }
+
+    .flow-part h3 {
+      margin: 0 0 0.35rem;
+      font-size: 1rem;
+    }
+
+    .arrow {
+      font-size: 1.6rem;
+      color: var(--muted);
+    }
+
+    .product {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .times {
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    .explanation {
+      color: var(--muted);
+      text-align: center;
+      font-size: 0.95rem;
+      margin: 0;
+    }
+
+    .matrices {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+
+    .matrix-card {
+      border-top: 4px solid var(--a);
+    }
+
+    .matrix-card.q {
+      border-color: var(--q);
+    }
+
+    .matrix-card.r {
+      border-color: var(--r);
+    }
+
+    table {
+      border-collapse: collapse;
+      margin: 0 auto;
+    }
+
+    td {
+      border: 1px solid var(--border);
+      padding: 0.5rem 0.75rem;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .small td {
+      padding: 0.3rem 0.5rem;
+      font-size: 0.9rem;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .stat {
+      background: #f9fafb;
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 1.25rem;
+      font-weight: 700;
+    }
+
+    .stat-label {
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .boolean.yes {
+      color: var(--success);
+    }
+
+    .boolean.no {
+      color: var(--muted);
+    }
+
+    @media (max-width: 480px) {
+      h1 {
+        font-size: 1.4rem;
+      }
+
+      .flow {
+        flex-direction: column;
+      }
+
+      td {
+        padding: 0.4rem 0.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Factorización QR</h1>
+      <p class="subtitle">Descompón una matriz A en Q (ortogonal) y R (triangular superior).</p>
+    </header>
+
+    <section class="card">
+      <label for="matrix-input">Matriz A</label>
+      <textarea id="matrix-input" placeholder="Filas separadas por saltos de línea, números separados por espacios">1 2
+3 4</textarea>
+      <p class="hint">Cada fila en una línea. Separa los números con espacios o tabulaciones.</p>
+      <button id="calculate-btn" type="button">Calcular QR</button>
+      <div id="error-msg" class="error" style="display: none" role="alert"></div>
+      <div id="loading" class="loading" style="display: none">Calculando...</div>
+    </section>
+
+    <section id="result" class="result">
+      <div class="card">
+        <h2>¿Qué está pasando?</h2>
+        <div class="flow">
+          <div class="flow-part">
+            <h3>A</h3>
+            <div id="flow-a"></div>
+          </div>
+          <div class="arrow">↓</div>
+          <div class="flow-part">
+            <h3>Q × R</h3>
+            <div id="flow-qr" class="product"></div>
+          </div>
+        </div>
+        <p class="explanation">La factorización QR descompone la matriz A en el producto de Q y R.</p>
+      </div>
+
+      <div class="matrices">
+        <div class="card matrix-card">
+          <h3>Matriz A</h3>
+          <div id="matrix-a"></div>
+        </div>
+        <div class="card matrix-card q">
+          <h3>Matriz Q</h3>
+          <div id="matrix-q"></div>
+        </div>
+        <div class="card matrix-card r">
+          <h3>Matriz R</h3>
+          <div id="matrix-r"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Estadísticas</h2>
+        <div class="stats-grid">
+          <div class="stat">
+            <div id="stat-max" class="stat-value"></div>
+            <div class="stat-label">Máximo</div>
+          </div>
+          <div class="stat">
+            <div id="stat-min" class="stat-value"></div>
+            <div class="stat-label">Mínimo</div>
+          </div>
+          <div class="stat">
+            <div id="stat-avg" class="stat-value"></div>
+            <div class="stat-label">Promedio</div>
+          </div>
+          <div class="stat">
+            <div id="stat-sum" class="stat-value"></div>
+            <div class="stat-label">Suma</div>
+          </div>
+          <div class="stat">
+            <div id="stat-q-diag" class="stat-value boolean"></div>
+            <div class="stat-label">Q es diagonal</div>
+          </div>
+          <div class="stat">
+            <div id="stat-r-diag" class="stat-value boolean"></div>
+            <div class="stat-label">R es diagonal</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const input = document.getElementById('matrix-input');
+    const btn = document.getElementById('calculate-btn');
+    const errorMsg = document.getElementById('error-msg');
+    const loading = document.getElementById('loading');
+    const result = document.getElementById('result');
+
+    function formatNumber(value) {
+      const n = Number(value.toFixed(6));
+      return Object.is(n, -0) ? '0' : String(n);
+    }
+
+    function createTable(matrix, small) {
+      const table = document.createElement('table');
+      if (small) table.classList.add('small');
+      const tbody = document.createElement('tbody');
+      for (const row of matrix) {
+        const tr = document.createElement('tr');
+        for (const cell of row) {
+          const td = document.createElement('td');
+          td.textContent = formatNumber(cell);
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+      return table;
+    }
+
+    function renderMatrix(container, matrix) {
+      container.innerHTML = '';
+      container.appendChild(createTable(matrix, false));
+    }
+
+    function renderProduct(container, left, right) {
+      container.innerHTML = '';
+      container.appendChild(createTable(left, true));
+      const times = document.createElement('span');
+      times.className = 'times';
+      times.textContent = '×';
+      container.appendChild(times);
+      container.appendChild(createTable(right, true));
+    }
+
+    function parseMatrix(text) {
+      const lines = text.trim().split(/\n/).filter(line => line.trim() !== '');
+      if (lines.length === 0) {
+        throw new Error('Ingresa al menos una fila.');
+      }
+      const matrix = [];
+      let width = null;
+      for (const line of lines) {
+        const values = line.trim().split(/\s+/).map(Number);
+        if (values.some(Number.isNaN)) {
+          throw new Error('Todas las celdas deben ser números válidos.');
+        }
+        if (width === null) width = values.length;
+        if (values.length === 0 || values.length !== width) {
+          throw new Error('Todas las filas deben tener la misma cantidad de columnas.');
+        }
+        matrix.push(values);
+      }
+      return matrix;
+    }
+
+    function showError(message) {
+      errorMsg.textContent = message;
+      errorMsg.style.display = 'block';
+    }
+
+    function hideError() {
+      errorMsg.style.display = 'none';
+      errorMsg.textContent = '';
+    }
+
+    function setBoolean(el, value) {
+      el.textContent = value ? 'Sí' : 'No';
+      el.className = 'stat-value boolean ' + (value ? 'yes' : 'no');
+    }
+
+    async function calculate() {
+      hideError();
+      result.classList.remove('visible');
+
+      let matrix;
+      try {
+        matrix = parseMatrix(input.value);
+      } catch (err) {
+        showError(err.message);
+        return;
+      }
+
+      btn.disabled = true;
+      loading.style.display = 'block';
+
+      try {
+        const response = await fetch('/api/v1/qr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ matrix })
+        });
+
+        let data;
+        try {
+          data = await response.json();
+        } catch {
+          throw new Error('La respuesta del servidor no es válida.');
+        }
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Ocurrió un error en el servidor.');
+        }
+
+        renderMatrix(document.getElementById('matrix-a'), matrix);
+        renderMatrix(document.getElementById('matrix-q'), data.q);
+        renderMatrix(document.getElementById('matrix-r'), data.r);
+        renderMatrix(document.getElementById('flow-a'), matrix);
+        renderProduct(document.getElementById('flow-qr'), data.q, data.r);
+
+        document.getElementById('stat-max').textContent = formatNumber(data.stats.global.max);
+        document.getElementById('stat-min').textContent = formatNumber(data.stats.global.min);
+        document.getElementById('stat-avg').textContent = formatNumber(data.stats.global.average);
+        document.getElementById('stat-sum').textContent = formatNumber(data.stats.global.sum);
+        setBoolean(document.getElementById('stat-q-diag'), data.stats.q.isDiagonal);
+        setBoolean(document.getElementById('stat-r-diag'), data.stats.r.isDiagonal);
+
+        result.classList.add('visible');
+      } catch (err) {
+        showError(err.message || 'No se pudo conectar con el servidor.');
+      } finally {
+        btn.disabled = false;
+        loading.style.display = 'none';
+      }
+    }
+
+    btn.addEventListener('click', calculate);
+  </script>
+</body>
+</html>
