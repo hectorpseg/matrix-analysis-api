@@ -205,14 +205,16 @@ No usa frameworks ni dependencias de frontend; es HTML, CSS y JavaScript vanilla
 
 ## Deployment
 
-La configuración actual está pensada para Docker Compose con dos servicios:
+La aplicación se despliega como dos servicios independientes y también puede ejecutarse localmente con Docker Compose:
 
 - `go-api`
 - `node-api`
 
 El servicio Go se conecta al servicio Node usando la variable de entorno `NODE_API_URL`. En `docker-compose.yml` este valor es `http://node-api:3001`.
 
-URL pública del servicio Go: [agregar URL]
+**Demo pública:** https://matrix-analysis-api-1.onrender.com/
+
+URL pública del servicio Go: https://matrix-analysis-api-1.onrender.com/
 URL pública del servicio Node: [agregar URL]
 
 ## Decisiones técnicas
