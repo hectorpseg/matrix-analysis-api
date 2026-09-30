@@ -185,5 +185,5 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-	log.Fatal(newApp().Listen(":" + port))
+	log.Fatal(newApp().Listen("0.0.0.0:" + port))
 }
