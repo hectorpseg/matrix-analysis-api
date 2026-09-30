@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -49,6 +50,9 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
+//go:embed web/index.html
+var indexHTML []byte
+
 // statsRequestTimeout is the maximum time allowed for the Go -> Node request.
 // It is package-level so tests can override it without adding public config.
 var statsRequestTimeout = 10 * time.Second
@@ -58,8 +62,14 @@ func newApp() *fiber.App {
 	app.Get("/health", func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
+	app.Get("/", handleIndex)
 	app.Post("/api/v1/qr", handleQR)
 	return app
+}
+
+func handleIndex(c fiber.Ctx) error {
+	c.Set("Content-Type", "text/html; charset=utf-8")
+	return c.Send(indexHTML)
 }
 
 func handleQR(c fiber.Ctx) error {
