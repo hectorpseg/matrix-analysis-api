@@ -57,6 +57,23 @@ var indexHTML []byte
 // It is package-level so tests can override it without adding public config.
 var statsRequestTimeout = 10 * time.Second
 
+// statsRetryDeadline is the maximum time allowed for all retries of a single
+// stats request. It is package-level so tests can override it.
+var statsRetryDeadline = 40 * time.Second
+
+// nodeWarmupTimeout is the maximum time allowed for the background Node
+// health check triggered from the root endpoint.
+var nodeWarmupTimeout = 3 * time.Second
+
+// nodeBaseURL returns the configured Node API URL with no trailing slash.
+func nodeBaseURL() string {
+	nodeURL := os.Getenv("NODE_API_URL")
+	if nodeURL == "" {
+		nodeURL = "http://localhost:3001"
+	}
+	return strings.TrimRight(nodeURL, "/")
+}
+
 func newApp() *fiber.App {
 	app := fiber.New()
 	app.Get("/health", func(c fiber.Ctx) error {
@@ -68,6 +85,11 @@ func newApp() *fiber.App {
 }
 
 func handleIndex(c fiber.Ctx) error {
+	// Trigger a background warm-up of the Node stats service so that cold
+	// Render Free deployments have a chance to wake before the QR endpoint
+	// needs them. The response is not blocked on the warm-up result.
+	go warmupNode(context.Background(), &http.Client{Timeout: nodeWarmupTimeout}, nodeBaseURL())
+
 	c.Set("Content-Type", "text/html; charset=utf-8")
 	return c.Send(indexHTML)
 }
@@ -135,13 +157,44 @@ func isFiniteMatrix(A [][]float64) bool {
 	return true
 }
 
-// fetchStats sends Q and R to the Node stats service and returns its response.
-func fetchStats(Q, R [][]float64) (statsResponse, error) {
-	nodeURL := os.Getenv("NODE_API_URL")
-	if nodeURL == "" {
-		nodeURL = "http://localhost:3001"
+// warmupNode sends a best-effort health request to the Node service.
+// Errors and timeouts are ignored; the QR endpoint retries its own stats call.
+func warmupNode(ctx context.Context, client *http.Client, baseURL string) {
+	ctx, cancel := context.WithTimeout(ctx, nodeWarmupTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(baseURL, "/")+"/health", nil)
+	if err != nil {
+		return
 	}
-	url := strings.TrimRight(nodeURL, "/") + "/api/v1/stats"
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+}
+
+// retryDelay returns the wait before retry attempt n (1-based).
+// Delays follow 0, 1s, 2s, 4s, ... capped at 8s.
+func retryDelay(attempt int) time.Duration {
+	if attempt <= 1 {
+		return 0
+	}
+	d := time.Duration(1<<(attempt-2)) * time.Second
+	const maxDelay = 8 * time.Second
+	if d > maxDelay {
+		return maxDelay
+	}
+	return d
+}
+
+// fetchStats sends Q and R to the Node stats service and returns its response.
+// It retries transient failures (network errors, timeouts, HTTP 5xx) with
+// exponential backoff until statsRetryDeadline. HTTP 4xx responses are not
+// retried because they indicate request/application errors.
+func fetchStats(Q, R [][]float64) (statsResponse, error) {
+	url := nodeBaseURL() + "/api/v1/stats"
 
 	payload := map[string]any{
 		"q": Q,
@@ -152,32 +205,57 @@ func fetchStats(Q, R [][]float64) (statsResponse, error) {
 		return statsResponse{}, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), statsRequestTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), statsRetryDeadline)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	client := &http.Client{Timeout: statsRequestTimeout}
+
+	for attempt := 1; ; attempt++ {
+		stats, status, err := doStatsRequest(ctx, client, url, body)
+		if err == nil {
+			return stats, nil
+		}
+		// Do not retry client errors; they mean the request itself is bad.
+		if status >= http.StatusBadRequest && status < http.StatusInternalServerError {
+			return statsResponse{}, err
+		}
+
+		select {
+		case <-ctx.Done():
+			return statsResponse{}, ctx.Err()
+		case <-time.After(retryDelay(attempt)):
+		}
+	}
+}
+
+// doStatsRequest performs a single stats call. It returns the HTTP status so
+// callers can decide whether the failure is retryable.
+func doStatsRequest(ctx context.Context, client *http.Client, url string, body []byte) (statsResponse, int, error) {
+	reqCtx, cancel := context.WithTimeout(ctx, statsRequestTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return statsResponse{}, err
+		return statsResponse{}, 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: statsRequestTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		return statsResponse{}, err
+		return statsResponse{}, 0, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		io.Copy(io.Discard, resp.Body)
-		return statsResponse{}, fmt.Errorf("node returned status %d", resp.StatusCode)
+		return statsResponse{}, resp.StatusCode, fmt.Errorf("node returned status %d", resp.StatusCode)
 	}
 
 	var stats statsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
-		return statsResponse{}, err
+		return statsResponse{}, resp.StatusCode, err
 	}
-	return stats, nil
+	return stats, resp.StatusCode, nil
 }
 
 func main() {
