@@ -26,7 +26,7 @@ Browser / Cliente HTTP
 - **Go + Fiber**: expone `POST /api/v1/qr` y sirve el frontend.
 - **Node.js + Express**: expone `POST /api/v1/stats`.
 - **Comunicación HTTP**: el servicio Go llama al servicio Node a través de la variable `NODE_API_URL`.
-- **Docker**: ambos servicios están dockerizados y se orquestan con `docker compose`.
+- **Docker**: localmente ambos servicios se orquestan con `docker compose`. En Render corren dentro de un mismo contenedor usando el `Dockerfile` de la raíz.
 - **Frontend**: es un único archivo HTML embebido en el binario de Go y servido en `/`.
 
 ## Factorización QR
@@ -177,6 +177,43 @@ cd node-api
 npm test
 ```
 
+## Docker
+
+El repositorio incluye dockerización para dos escenarios: desarrollo local con Docker Compose e imagen combinada para Render.
+
+### Desarrollo local con Docker Compose
+
+Ver [Ejecución local](#ejecución-local).
+
+### Imagen combinada para Render
+
+El despliegue en Render usa un único contenedor que ejecuta ambos APIs. Los archivos principales son:
+
+- `Dockerfile` (raíz): construye el binario de Go e instala las dependencias de producción de Node en etapas separadas.
+- `start.sh` (raíz): script de inicio que levanta Node y luego Go.
+- `.dockerignore` (raíz): reduce el contexto de build.
+
+Comportamiento de `start.sh`:
+
+- Node inicia en el puerto 3001.
+- Go inicia usando el puerto definido por la variable `PORT`.
+- El script espera a que `http://127.0.0.1:3001/health` responda antes de iniciar Go.
+- Ambos procesos reciben las señales de terminación y se detienen limpiamente.
+
+Para probar la imagen combinada localmente:
+
+```bash
+docker build -t interseguro-combined .
+
+docker run -d --name interseguro-combined-test \
+  -p 8081:8080 \
+  -e PORT=8080 \
+  -e NODE_API_URL=http://127.0.0.1:3001 \
+  interseguro-combined
+```
+
+Luego accede a http://localhost:8081.
+
 ## Tests
 
 El repositorio incluye pruebas automatizadas en ambos servicios.
@@ -205,17 +242,32 @@ No usa frameworks ni dependencias de frontend; es HTML, CSS y JavaScript vanilla
 
 ## Deployment
 
-La aplicación se despliega como dos servicios independientes y también puede ejecutarse localmente con Docker Compose:
+### Render
 
-- `go-api`
-- `node-api`
+El despliegue en producción usa un único Render Web Service que ejecuta ambos APIs dentro del mismo contenedor, manteniendo la arquitectura de dos APIs separadas comunicándose por HTTP.
 
-El servicio Go se conecta al servicio Node usando la variable de entorno `NODE_API_URL`. En `docker-compose.yml` este valor es `http://node-api:3001`.
+Configuración del servicio:
 
-**Demo pública:** https://matrix-analysis-api-1.onrender.com/
+- **Root directory**: raíz del repositorio.
+- **Dockerfile**: `Dockerfile` en la raíz.
+- **Puerto público**: el expuesto por Render apunta al Go API, que escucha en el puerto definido por la variable `PORT`.
+- **Node API**: escucha en `localhost:3001` dentro del contenedor; no está expuesto públicamente.
+- **NODE_API_URL**: `http://127.0.0.1:3001`.
 
-URL pública del servicio Go: https://matrix-analysis-api-1.onrender.com/
-URL pública del servicio Node: [agregar URL]
+El contenedor inicia ambos procesos con `start.sh`:
+
+1. Node arranca en el puerto 3001.
+2. `start.sh` espera a que `http://127.0.0.1:3001/health` responda.
+3. Go arranca en el puerto indicado por `PORT`.
+4. Ambos procesos se detienen limpiamente al recibir `SIGTERM` o `SIGINT`.
+
+Motivo del despliegue combinado: los servicios gratuitos de Render pueden suspenderse tras inactividad. Al ejecutar ambos APIs en el mismo servicio, despiertan y arrancan juntos, en lugar de depender de que un servicio Node suspendido responda desde el servicio Go.
+
+URL pública del servicio: https://matrix-analysis-api-1.onrender.com/
+
+### Docker Compose local
+
+Para desarrollo local sigue funcionando la configuración separada descrita en [Ejecución local](#ejecución-local) y [Docker](#docker).
 
 ## Decisiones técnicas
 
@@ -229,7 +281,7 @@ URL pública del servicio Node: [agregar URL]
 ## Limitaciones / supuestos
 
 - El frontend y el API de Go esperan matrices de valores numéricos finitos.
-- La comunicación entre servicios usa HTTP sin retry; si Node falla o tarda más de 10 segundos, Go devuelve `502 Bad Gateway`.
+- La comunicación entre servicios usa HTTP con reintentos y backoff exponencial; si Node no responde dentro del deadline, Go devuelve `502 Bad Gateway`.
 - La diagonalidad se evalúa con tolerancia `1e-9` y solo tiene sentido para matrices cuadradas; matrices no cuadradas se reportan como no diagonales.
 - La factorización QR tiene ambigüedad de signo, por lo que los resultados numéricos pueden variar en signo respecto a otras implementaciones.
 
