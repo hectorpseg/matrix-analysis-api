@@ -24,3 +24,20 @@ services:
       interval: 5s
       timeout: 3s
       retries: 3
+
+  # Combined deployment used by Render. Both APIs run in one container;
+  # Go talks to Node over localhost:3001.
+  combined:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8080"
+    environment:
+      - PORT=8080
+      - NODE_API_URL=http://127.0.0.1:3001
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
